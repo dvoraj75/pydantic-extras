@@ -15,6 +15,11 @@ _DEFAULT_SENSITIVE_KEYS = {
     "pass",
     "secret",
     "key",
+    "sessionid",
+    "session_id",
+    "id_token",
+    "refresh_token",
+    "client_secret",
 }
 
 
@@ -44,8 +49,8 @@ class SecretURL(str):
         obj.__unmasked = value
         obj.__masked = _mask_url(
             value,
-            sensitive_keys={k for k in (sensitive_keys or _DEFAULT_SENSITIVE_KEYS)},
-            mask_token=mask_token
+            sensitive_keys={k.lower() for k in (sensitive_keys or _DEFAULT_SENSITIVE_KEYS)},
+            mask_token=mask_token,
         )
         return obj
 
@@ -85,7 +90,7 @@ class SecretURL(str):
 
         return core_schema.no_info_after_validator_function(
             validate,
-            core_schema.url_schema(),
+            core_schema.str_schema(),
             serialization=core_schema.plain_serializer_function_ser_schema(
                 serialize, when_used="always", info_arg=True
             ),
@@ -107,12 +112,17 @@ def _mask_url(url: str, *, sensitive_keys: set[str], mask_token: str) -> str:
     if "@" in netloc:
         userinfo, hostpart = _url.netloc.rsplit("@", 1)
         if ":" in userinfo:
-            username, password = userinfo.split(":", 1)
+            username, _ = userinfo.split(":", 1)
             userinfo_masked = f"{quote(unquote(username))}:{mask_token}"
         else:
             userinfo_masked = userinfo
 
         netloc = f"{userinfo_masked}@{hostpart}"
 
-    q_params = [(k, mask_token if k.lower() in sensitive_keys else v) for k, v in parse_qsl(_url.query, keep_blank_values=True)]
-    return urlunsplit((_url.scheme, netloc, _url.path, urlencode(q_params), _url.fragment))
+    q_params = [
+        (k, mask_token if k.lower() in sensitive_keys else v)
+        for k, v in parse_qsl(_url.query, keep_blank_values=True)
+    ]
+    return urlunsplit(
+        (_url.scheme, netloc, _url.path, urlencode(q_params), _url.fragment)
+    )
